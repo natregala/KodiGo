@@ -1,0 +1,261 @@
+{
+  "version": 1,
+  "id": "water-cycle",
+  "title": "The Water Cycle",
+  "paragraphs": [
+    "The water cycle is the path water takes as it moves around the Earth. Water is always moving between the land, the sea, and the sky.",
+    "Evaporation happens when the sun heats water in seas, rivers, and lakes. The water turns into water vapor, a gas, and rises into the air.",
+    "Condensation happens when water vapor cools high in the sky. The vapor turns back into tiny drops of water that form clouds.",
+    "Precipitation is water that falls from clouds as rain, snow, or hail. In the Philippines, most precipitation falls as rain during the rainy season. During El Niño, much less rain falls.",
+    "After rain falls, some water flows into rivers and back to the sea. Some soaks into the ground. Then the cycle starts again."
+  ],
+  "summaries": [
+    {
+      "text": {
+        "en": "Water moves in a circle. The sun makes water go up. It makes clouds. Rain falls down. Then it starts again.",
+        "tl": "Umiikot ang tubig. Pinapainit ito ng araw at umaakyat ito. Nabubuo ang mga ulap. Bumabagsak ang ulan. Magsisimula ulit ito."
+      },
+      "sources": [
+        1,
+        2,
+        3,
+        4,
+        5
+      ]
+    },
+    {
+      "text": {
+        "en": "In the water cycle, the sun heats water so it rises as vapor. The vapor cools and forms clouds. Water falls back as rain and flows to the sea.",
+        "tl": "Pinapainit ng araw ang tubig kaya sumisingaw ito. Lumalamig ang singaw at bumubuo ng ulap. Bumabagsak at naiipon ang tubig, at umiikot itong muli."
+      },
+      "sources": [
+        2,
+        3,
+        4,
+        5
+      ]
+    }
+  ],
+  "questions": [
+    {
+      "level": 1,
+      "skill": "main",
+      "source": 1,
+      "prompt": {
+        "en": "What is this lesson mostly about?",
+        "tl": "Tungkol saan ang araling ito?"
+      },
+      "options": [
+        {
+          "en": "How water moves around the Earth",
+          "tl": "Kung paano gumagalaw ang tubig sa Daigdig"
+        },
+        {
+          "en": "How plants grow",
+          "tl": "Kung paano lumalaki ang halaman"
+        },
+        {
+          "en": "How to cook rice",
+          "tl": "Kung paano magsaing"
+        }
+      ],
+      "key": 0,
+      "hints": [
+        {
+          "en": "Look at the first sentence of the lesson.",
+          "tl": "Tingnan ang unang pangungusap ng aralin."
+        },
+        {
+          "en": "The lesson talks about the land, the sea, and the sky.",
+          "tl": "Binabanggit ang lupa, dagat at langit."
+        }
+      ],
+      "explanation": {
+        "en": "The lesson is about the water cycle, the path water takes around the Earth.",
+        "tl": "Tungkol ito sa siklo ng tubig sa Daigdig."
+      }
+    },
+    {
+      "level": 1,
+      "skill": "detail",
+      "source": 2,
+      "prompt": {
+        "en": "What heats the water so it goes up?",
+        "tl": "Ano ang nagpapainit sa tubig para umakyat ito?"
+      },
+      "options": [
+        {
+          "en": "The moon",
+          "tl": "Ang buwan"
+        },
+        {
+          "en": "The sun",
+          "tl": "Ang araw"
+        },
+        {
+          "en": "The wind",
+          "tl": "Ang hangin"
+        }
+      ],
+      "key": 1,
+      "hints": [
+        {
+          "en": "Look at paragraph 2.",
+          "tl": "Tingnan ang ikalawang talata."
+        },
+        {
+          "en": "Think about what warms a lake during the day.",
+          "tl": "Isipin kung ano ang nagpapainit sa lawa sa araw."
+        }
+      ],
+      "explanation": {
+        "en": "Heat from the sun turns some liquid water into vapor.",
+        "tl": "Ginagawang singaw ng init ng araw ang ilang likidong tubig."
+      }
+    },
+    {
+      "level": 2,
+      "skill": "vocab",
+      "source": 3,
+      "prompt": {
+        "en": "In the lesson, what does \"condensation\" mean?",
+        "tl": "Sa aralin, ano ang ibig sabihin ng \"kondensasyon\"?"
+      },
+      "options": [
+        {
+          "en": "Water soaking into the ground",
+          "tl": "Pagsipsip ng lupa sa tubig"
+        },
+        {
+          "en": "Water getting hot",
+          "tl": "Pag-init ng tubig"
+        },
+        {
+          "en": "Water vapor cooling into tiny drops",
+          "tl": "Paglamig ng singaw at pagiging maliliit na patak"
+        },
+        {
+          "en": "Water falling as rain",
+          "tl": "Pagbagsak ng tubig bilang ulan"
+        }
+      ],
+      "key": 2,
+      "hints": [
+        {
+          "en": "Look at paragraph 3.",
+          "tl": "Tingnan ang ikatlong talata."
+        },
+        {
+          "en": "Think about what happens as clouds form.",
+          "tl": "Isipin kung paano nabubuo ang mga ulap."
+        }
+      ],
+      "explanation": {
+        "en": "Condensation is when water vapor cools and turns into tiny drops that form clouds.",
+        "tl": "Sa kondensasyon, lumalamig ang singaw at nagiging maliliit na patak na bumubuo ng mga ulap."
+      }
+    },
+    {
+      "level": 2,
+      "skill": "inference",
+      "source": 5,
+      "prompt": {
+        "en": "Why do rivers in the Philippines get fuller in the rainy season?",
+        "tl": "Bakit tumataas ang tubig sa mga ilog sa Pilipinas kapag tag-ulan?"
+      },
+      "options": [
+        {
+          "en": "The sun is hotter",
+          "tl": "Mas mainit ang araw"
+        },
+        {
+          "en": "More rain falls and flows into them",
+          "tl": "Mas maraming ulan ang bumabagsak at dumadaloy sa mga ilog"
+        }
+      ],
+      "key": 1,
+      "hints": [
+        {
+          "en": "Think about where water goes after it rains.",
+          "tl": "Isipin kung saan napupunta ang tubig pagkatapos umulan."
+        },
+        {
+          "en": "Some rainwater flows into rivers.",
+          "tl": "Dumadaloy sa ilog ang ilang tubig-ulan."
+        }
+      ],
+      "explanation": {
+        "en": "More rainwater flows into the rivers during the rainy season.",
+        "tl": "Mas maraming tubig-ulan ang dumadaloy sa ilog kapag tag-ulan."
+      }
+    },
+    {
+      "level": 1,
+      "skill": "detail",
+      "source": 4,
+      "prompt": {
+        "en": "Which of these is NOT named as a kind of precipitation?",
+        "tl": "Alin dito ang HINDI binanggit na uri ng presipitasyon?"
+      },
+      "options": [
+        {
+          "en": "Rain",
+          "tl": "Ulan"
+        },
+        {
+          "en": "Hail",
+          "tl": "Yelong ulan"
+        },
+        {
+          "en": "Fog",
+          "tl": "Hamog"
+        },
+        {
+          "en": "Snow",
+          "tl": "Niyebe"
+        }
+      ],
+      "key": 2,
+      "hints": [
+        {
+          "en": "Look for the examples in paragraph 4.",
+          "tl": "Hanapin ang mga halimbawa sa ikaapat na talata."
+        },
+        {
+          "en": "The lesson names rain, snow, and hail.",
+          "tl": "Binanggit sa aralin ang ulan, niyebe at yelong ulan."
+        }
+      ],
+      "explanation": {
+        "en": "The lesson names rain, snow and hail. It does not list fog.",
+        "tl": "Binanggit sa aralin ang ulan, niyebe at yelong ulan. Hindi binanggit ang hamog."
+      }
+    }
+  ],
+  "cards": [
+    {
+      "en": "evaporation",
+      "tl": "pagsingaw",
+      "definition": {
+        "en": "When water gets hot and turns into a gas that goes up into the air.",
+        "tl": "Kapag umiinit at nagiging singaw ang tubig."
+      }
+    },
+    {
+      "en": "cloud",
+      "tl": "ulap",
+      "definition": {
+        "en": "Many tiny drops of water together high in the sky.",
+        "tl": "Maraming maliliit na patak ng tubig na magkakasama sa langit."
+      }
+    },
+    {
+      "en": "El Niño",
+      "tl": "El Niño (tagtuyot)",
+      "definition": {
+        "en": "A time when much less rain falls and the land gets very dry.",
+        "tl": "Panahong kaunti ang ulan at natutuyo ang lupa."
+      }
+    }
+  ]
+}
