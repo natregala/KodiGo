@@ -20,7 +20,9 @@ For the Android emulator, run:
 flutter run -d emulator-5554 --dart-define=KODIGO_GENERATOR_URL=http://10.0.2.2:8080/generate
 ```
 
-For iOS and physical devices, give the app an HTTPS generator URL reachable from the device. The bundled server is for local development. Put remote access behind an authenticated, rate-limited HTTPS gateway before making it available to students. Keep the provider key in the backend environment. Preparing a lesson sends the selected PDF to the backend, which extracts and submits its text to the model. It accepts text-based PDFs up to 12 MB, 40 pages and 35,000 characters. Use a PDF with selectable text for scanned material.
+For iOS and physical devices, give the app an HTTPS generator URL reachable from the device. The bundled server is for local development. Put remote access behind an authenticated, rate-limited HTTPS gateway before making it available to students. Keep the provider key in the backend environment.
+
+Preparing a lesson validates the PDF locally, extracts and normalizes selectable paragraphs via `POST /extract` (with CORS enabled for Chrome preview, and `GET /health` for readiness), lets the student verify the lesson title and extracted paragraphs, and sends the confirmed text to `POST /generate` (raw `application/pdf` uploads to `/generate` remain supported). It accepts text-based PDFs up to 12 MB, 40 pages and 35,000 characters. Use a PDF with selectable text for scanned material.
 
 ## Study and transfer
 
@@ -30,7 +32,7 @@ Share saves a versioned KodiGo JSON pack through the device share sheet. Use **O
 
 ## Verify
 
-Run `flutter analyze` and `flutter test`. Use this student walkthrough for platform testing and the proposal's evaluation:
+Run `pytest -v backend/tests/test_pdf_extractor.py`, `flutter analyze`, and `flutter test`. Use this student walkthrough for platform testing and the proposal's evaluation:
 
 1. Prepare a new study pack from a short teacher-provided PDF with selectable text. Check a summary citation and a question-feedback citation against the PDF.
 2. Start Catch-up. Trigger the two hints, leave the app mid-question, enable airplane mode and reopen it. Verify the question and hint survive. Finish the session and check each skill's progress.
