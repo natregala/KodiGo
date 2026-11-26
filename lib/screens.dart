@@ -8,6 +8,8 @@ import 'package:http/http.dart' as http;
 import 'package:share_plus/share_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'pdf_import.dart';
+import 'pdf_preview_sheet.dart';
 import 'study.dart';
 
 const paper = Color(0xfff7f6f2);
@@ -16,11 +18,25 @@ const green = Color(0xff1e6b57);
 const mint = Color(0xffe3efea);
 const stroke = Color(0xffe3e0d8);
 const muted = Color(0xff5d615c);
+const errorSurface = Color(0xffffeee5);
+const errorAccent = Color(0xff9b4e2f);
 
 class StudyHome extends StatefulWidget {
-  const StudyHome({super.key, required this.sample, required this.storage});
+  const StudyHome({
+    super.key,
+    required this.sample,
+    required this.storage,
+    this.pdfService,
+    this.generatorUrl,
+    this.pickFile,
+    this.httpClientFactory,
+  });
   final StudyPack sample;
   final SharedPreferencesAsync storage;
+  final PdfImportService? pdfService;
+  final String? generatorUrl;
+  final Future<PickedPdf?> Function({required bool pdf})? pickFile;
+  final http.Client Function()? httpClientFactory;
 
   @override
   State<StudyHome> createState() => _StudyHomeState();
@@ -39,11 +55,20 @@ class _StudyHomeState extends State<StudyHome> {
   http.Client? request;
   String locale = 'en';
   String? error;
+  PdfImportException? pdfError;
+  PdfImportStage? importStage;
+  String? importFileName;
+  int importSession = 0;
   int tab = 0;
   bool loading = true;
   bool busy = false;
   bool speaking = false;
   int speechRequest = 0;
+
+  PdfImportService get _pdfService =>
+      widget.pdfService ?? const PdfImportService();
+  String get _generatorUrl => widget.generatorUrl ?? generator;
+  http.Client _createClient() => widget.httpClientFactory?.call() ?? http.Client();
 
   String tr(String en, String tl) => locale == 'en' ? en : tl;
   String copy(Copy text) => localized(text, locale);
@@ -228,114 +253,226 @@ class _StudyHomeState extends State<StudyHome> {
     }, top: true);
   }
 
+  void _cancelImport() {
+    importSession++;
+    final client = request;
+    request = null;
+    client?.close();
+    if (mounted) {
+      setState(() {
+        busy = false;
+        importStage = null;
+        importFileName = null;
+      });
+    }
+  }
+
+  Future<PickedPdf?> _defaultPickFile({required bool pdf}) async {
+    final picked = await FilePicker.pickFiles(
+      type: pdf ? FileType.custom : FileType.any,
+      allowedExtensions: pdf ? ['pdf'] : null,
+    );
+    if (picked.isEmpty) return null;
+    final file = picked.single;
+    if ((file.lengthSync() ?? 0) > maxPdfBytes) {
+      throw pdf
+          ? const PdfImportException(PdfImportErrorCode.fileTooLarge)
+          : const FormatException('file_size');
+    }
+    final bytes = await file.readAsBytes();
+    if (bytes.length > maxPdfBytes) {
+      throw pdf
+          ? const PdfImportException(PdfImportErrorCode.fileTooLarge)
+          : const FormatException('file_size');
+    }
+    return PickedPdf(name: file.name, bytes: bytes);
+  }
+
+  void _storeAndOpenPack(StudyPack value, {required bool isPdf}) {
+    if (value.sample && !isPdf) {
+      openPack(widget.sample);
+      return;
+    }
+    final existing = packs[value.id];
+    if (existing != null &&
+        jsonEncode(existing.json) != jsonEncode(value.json)) {
+      throw const FormatException('duplicate');
+    }
+    packs[value.id] = value;
+    openPack(value);
+  }
+
   Future<void> chooseFile({required bool pdf}) async {
     if (busy) return;
+    final session = ++importSession;
     setState(() {
       busy = true;
       error = null;
+      pdfError = null;
+      importStage = pdf ? PdfImportStage.reading : null;
+      importFileName = null;
     });
     try {
-      final picked = await FilePicker.pickFiles(
-        type: pdf ? FileType.custom : FileType.any,
-        allowedExtensions: pdf ? ['pdf'] : null,
-      );
-      if (picked.isEmpty || !mounted || !busy) return;
-      final file = picked.single;
-      if ((file.lengthSync() ?? 0) > 12 * 1024 * 1024) {
-        throw const FormatException('file_size');
-      }
-      final bytes = await file.readAsBytes();
-      if (bytes.length > 12 * 1024 * 1024) {
-        throw const FormatException('file_size');
-      }
-      if (!mounted || !busy) return;
-      final StudyPack value;
-      if (pdf) {
-        final url = Uri.tryParse(generator);
-        if (url == null ||
-            !url.hasAuthority ||
-            !['http', 'https'].contains(url.scheme)) {
-          throw const FormatException('configuration');
+      if (!pdf) {
+        final picked = widget.pickFile != null
+            ? await widget.pickFile!(pdf: false)
+            : await _defaultPickFile(pdf: false);
+        if (picked == null || !mounted || session != importSession) return;
+        if (picked.bytes.length > maxPdfBytes) {
+          throw const FormatException('file_size');
         }
-        final client = http.Client();
-        setState(() => request = client);
-        final response = await client
-            .post(
-              url,
-              headers: {
-                'Content-Type': 'application/pdf',
-                'X-Lesson-Title': Uri.encodeComponent(
-                  file.name.replaceFirst(
-                    RegExp(r'\.pdf$', caseSensitive: false),
-                    '',
-                  ),
-                ),
-              },
-              body: bytes,
-            )
-            .timeout(const Duration(seconds: 150));
-        if (!mounted || request != client) return;
-        if (response.statusCode != 200) {
-          throw FormatException(
-            response.statusCode == 422 ? 'unreadable' : 'connection',
-          );
-        }
-        value = StudyPack.decode(utf8.decode(response.bodyBytes));
-      } else {
-        value = StudyPack.decode(utf8.decode(bytes));
-      }
-      if (value.sample && !pdf) {
-        openPack(widget.sample);
-      } else {
-        final existing = packs[value.id];
-        if (existing != null &&
-            jsonEncode(existing.json) != jsonEncode(value.json)) {
-          throw const FormatException('duplicate');
-        }
-        packs[value.id] = value;
-        openPack(value);
-      }
-    } catch (cause) {
-      if (!mounted ||
-          !busy ||
-          (pdf && cause is http.ClientException && request == null)) {
+        final value = StudyPack.decode(utf8.decode(picked.bytes));
+        _storeAndOpenPack(value, isPdf: false);
         return;
       }
-      final code = cause is FormatException ? cause.message : '';
-      setState(
-        () => error = switch (code) {
-          'configuration' => tr(
-            'Connect the pack generation service to prepare new PDFs.',
-            'Ikonekta ang serbisyo para makagawa ng pack mula sa PDF.',
+
+      while (true) {
+        setState(() {
+          importStage = PdfImportStage.reading;
+          importFileName = null;
+        });
+        final picked = widget.pickFile != null
+            ? await widget.pickFile!(pdf: true)
+            : await _defaultPickFile(pdf: true);
+        if (picked == null || !mounted || session != importSession) return;
+
+        setState(() => importFileName = picked.name);
+        validatePdfBytes(picked.bytes);
+
+        final uri = _pdfService.parseGeneratorUri(_generatorUrl);
+        if (uri == null) {
+          throw const PdfImportException(PdfImportErrorCode.configuration);
+        }
+
+        final extractClient = _createClient();
+        setState(() {
+          request = extractClient;
+          importStage = PdfImportStage.extracting;
+        });
+        final extracted = await _pdfService.extract(
+          generatorUri: uri,
+          file: picked,
+          client: extractClient,
+        );
+        if (request == extractClient) {
+          request = null;
+          extractClient.close();
+        }
+        if (!mounted || session != importSession) return;
+
+        if (extracted == null) {
+          final genClient = _createClient();
+          setState(() {
+            request = genClient;
+            importStage = PdfImportStage.generating;
+          });
+          final value = await _pdfService.generateFromPdf(
+            generatorUri: uri,
+            file: picked,
+            client: genClient,
+          );
+          if (request == genClient) {
+            request = null;
+            genClient.close();
+          }
+          if (!mounted || session != importSession) return;
+          _storeAndOpenPack(value, isPdf: true);
+          return;
+        }
+
+        setState(() => importStage = null);
+        final previewResult = await showPdfPreviewSheet(
+          context: context,
+          document: extracted,
+          locale: locale,
+        );
+        if (!mounted || session != importSession) return;
+        if (previewResult is PdfPreviewRepick) {
+          continue;
+        }
+        if (previewResult is! PdfPreviewConfirm) {
+          return;
+        }
+
+        final genClient = _createClient();
+        setState(() {
+          request = genClient;
+          importStage = PdfImportStage.generating;
+          importFileName = previewResult.title;
+        });
+        final value = await _pdfService.generateFromExtracted(
+          generatorUri: uri,
+          title: previewResult.title,
+          paragraphs: extracted.paragraphs,
+          client: genClient,
+        );
+        if (request == genClient) {
+          request = null;
+          genClient.close();
+        }
+        if (!mounted || session != importSession) return;
+        _storeAndOpenPack(value, isPdf: true);
+        return;
+      }
+    } catch (cause) {
+      if (!mounted || session != importSession) return;
+      if (cause is PdfImportException) {
+        setState(() => pdfError = cause);
+      } else if (cause is FormatException) {
+        final code = cause.message;
+        if (pdf && code != 'duplicate') {
+          setState(
+            () => pdfError = PdfImportException(switch (code) {
+              'configuration' => PdfImportErrorCode.configuration,
+              'file_size' => PdfImportErrorCode.fileTooLarge,
+              'unreadable' => PdfImportErrorCode.unreadable,
+              _ => PdfImportErrorCode.generationFailed,
+            }),
+          );
+        } else {
+          setState(
+            () => error = switch (code) {
+              'file_size' => tr(
+                'Choose a readable file under 12 MB.',
+                'Pumili ng file na mababasa at mas maliit sa 12 MB.',
+              ),
+              'duplicate' => tr(
+                'A different pack with this ID is already saved.',
+                'May ibang pack na naka-save gamit ang ID na ito.',
+              ),
+              _ => tr(
+                'This file is not a supported KodiGo pack.',
+                'Hindi suportadong KodiGo pack ang file na ito.',
+              ),
+            },
+          );
+        }
+      } else if (pdf) {
+        setState(
+          () => pdfError = const PdfImportException(
+            PdfImportErrorCode.connection,
           ),
-          'file_size' => tr(
-            'Choose a readable file under 12 MB.',
-            'Pumili ng file na mababasa at mas maliit sa 12 MB.',
+        );
+      } else {
+        setState(
+          () => error = tr(
+            'This file is not a supported KodiGo pack.',
+            'Hindi suportadong KodiGo pack ang file na ito.',
           ),
-          'unreadable' => tr(
-            'Use a PDF with selectable text. Scans and locked PDFs cannot be read.',
-            'Gumamit ng PDF na may mapipiling teksto. Hindi mabasa ang scan o naka-lock na PDF.',
-          ),
-          'duplicate' => tr(
-            'A different pack with this ID is already saved.',
-            'May ibang pack na naka-save gamit ang ID na ito.',
-          ),
-          _ =>
-            pdf
-                ? tr(
-                    'Could not make the pack. Check your connection and try again.',
-                    'Hindi nagawa ang pack. Suriin ang internet at subukan ulit.',
-                  )
-                : tr(
-                    'This file is not a supported KodiGo pack.',
-                    'Hindi suportadong KodiGo pack ang file na ito.',
-                  ),
-        },
-      );
+        );
+      }
     } finally {
-      request?.close();
-      request = null;
-      if (mounted) setState(() => busy = false);
+      if (session == importSession) {
+        request?.close();
+        request = null;
+        if (mounted) {
+          setState(() {
+            busy = false;
+            importStage = null;
+            importFileName = null;
+          });
+        }
+      }
     }
   }
 
@@ -522,6 +659,7 @@ class _StudyHomeState extends State<StudyHome> {
                 onTap: () => update(() {
                   tab = index;
                   error = null;
+                  pdfError = null;
                 }, top: true),
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
@@ -611,58 +749,53 @@ class _StudyHomeState extends State<StudyHome> {
       color: mint,
     ),
     const SizedBox(height: 20),
-    Semantics(
-      button: true,
-      child: InkWell(
-        onTap: busy ? null : () => chooseFile(pdf: true),
-        borderRadius: BorderRadius.circular(16),
-        child: CustomPaint(
-          foregroundPainter: const _DashedOutline(),
-          child: panel(
-            Column(
-              children: [
-                const CircleAvatar(
-                  backgroundColor: green,
-                  foregroundColor: Colors.white,
-                  child: Icon(Icons.add),
-                ),
-                const SizedBox(height: 8),
-                heading(
-                  tr(
-                    'Choose a file from your phone',
-                    'Pumili ng file mula sa phone mo',
+    if (pdfError != null) ...[
+      _pdfErrorBanner(pdfError!),
+      const SizedBox(height: 16),
+    ],
+    if (busy && importStage != null)
+      _pdfProgressPanel(importStage!, importFileName)
+    else
+      Semantics(
+        button: true,
+        child: InkWell(
+          onTap: busy ? null : () => chooseFile(pdf: true),
+          borderRadius: BorderRadius.circular(16),
+          child: CustomPaint(
+            foregroundPainter: const _DashedOutline(),
+            child: panel(
+              Column(
+                children: [
+                  const CircleAvatar(
+                    backgroundColor: green,
+                    foregroundColor: Colors.white,
+                    child: Icon(Icons.add),
                   ),
-                  size: 18,
-                ),
-                const SizedBox(height: 5),
-                const Text('PDF'),
-              ],
+                  const SizedBox(height: 8),
+                  heading(
+                    tr(
+                      'Choose a file from your phone',
+                      'Pumili ng file mula sa phone mo',
+                    ),
+                    size: 18,
+                  ),
+                  const SizedBox(height: 5),
+                  Text(
+                    tr('PDF · Selectable text', 'PDF · Mapipiling teksto'),
+                    style: const TextStyle(color: muted),
+                  ),
+                ],
+              ),
             ),
           ),
         ),
       ),
-    ),
     const SizedBox(height: 20),
     button(
       tr('Open a pack file', 'Magbukas ng pack file'),
       busy ? null : () => chooseFile(pdf: false),
       outline: true,
     ),
-    if (busy) ...[
-      const SizedBox(height: 14),
-      const LinearProgressIndicator(),
-      TextButton(
-        onPressed: request == null
-            ? null
-            : () {
-                final client = request;
-                request = null;
-                client?.close();
-                setState(() {});
-              },
-        child: Text(tr('Cancel preparation', 'Kanselahin ang paghahanda')),
-      ),
-    ],
     const SizedBox(height: 20),
     heading(tr('Your study packs', 'Mga study pack mo'), size: 15),
     const SizedBox(height: 10),
@@ -707,6 +840,148 @@ class _StudyHomeState extends State<StudyHome> {
       ),
     ),
   ];
+
+  Widget _pdfProgressPanel(PdfImportStage stage, String? fileName) => Semantics(
+    liveRegion: true,
+    child: panel(
+      Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          ClipRRect(
+            borderRadius: BorderRadius.circular(8),
+            child: const LinearProgressIndicator(
+              minHeight: 6,
+              color: green,
+              backgroundColor: mint,
+            ),
+          ),
+          const SizedBox(height: 12),
+          Text(
+            pdfImportStageLabel(stage, locale),
+            style: const TextStyle(
+              fontSize: 15,
+              fontWeight: FontWeight.w700,
+              color: ink,
+            ),
+          ),
+          if (fileName != null && fileName.isNotEmpty) ...[
+            const SizedBox(height: 4),
+            Text(
+              fileName,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(fontSize: 13, color: muted),
+            ),
+          ],
+          const SizedBox(height: 12),
+          SizedBox(
+            width: double.infinity,
+            child: OutlinedButton(
+              onPressed: _cancelImport,
+              style: OutlinedButton.styleFrom(
+                backgroundColor: Colors.white,
+                foregroundColor: ink,
+                side: const BorderSide(color: stroke),
+                padding: const EdgeInsets.symmetric(
+                  vertical: 12,
+                  horizontal: 12,
+                ),
+                minimumSize: const Size(0, 48),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(14),
+                ),
+                textStyle: const TextStyle(
+                  fontSize: 15,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              child: Text(tr('Cancel', 'Kanselahin')),
+            ),
+          ),
+        ],
+      ),
+      border: stroke,
+    ),
+  );
+
+  Widget _pdfErrorBanner(PdfImportException failure) {
+    final copy = pdfImportErrorCopy(failure, locale);
+    return Semantics(
+      liveRegion: true,
+      child: panel(
+        Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text(
+              copy.title,
+              style: const TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.w700,
+                color: errorAccent,
+              ),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              copy.detail,
+              style: const TextStyle(fontSize: 14, color: ink),
+            ),
+            const SizedBox(height: 12),
+            SizedBox(
+              width: double.infinity,
+              child: OutlinedButton(
+                onPressed: busy ? null : () => chooseFile(pdf: true),
+                style: OutlinedButton.styleFrom(
+                  backgroundColor: errorAccent,
+                  foregroundColor: Colors.white,
+                  side: const BorderSide(color: errorAccent),
+                  padding: const EdgeInsets.symmetric(
+                    vertical: 12,
+                    horizontal: 12,
+                  ),
+                  minimumSize: const Size(0, 46),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(14),
+                  ),
+                  textStyle: const TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                child: Text(tr('Choose another PDF', 'Pumili ng ibang PDF')),
+              ),
+            ),
+            const SizedBox(height: 8),
+            SizedBox(
+              width: double.infinity,
+              child: OutlinedButton(
+                onPressed: () => setState(() => pdfError = null),
+                style: OutlinedButton.styleFrom(
+                  backgroundColor: Colors.white,
+                  foregroundColor: errorAccent,
+                  side: const BorderSide(color: stroke),
+                  padding: const EdgeInsets.symmetric(
+                    vertical: 12,
+                    horizontal: 12,
+                  ),
+                  minimumSize: const Size(0, 44),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(14),
+                  ),
+                  textStyle: const TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                child: Text(tr('Dismiss', 'Isara')),
+              ),
+            ),
+          ],
+        ),
+        color: errorSurface,
+        border: errorAccent,
+      ),
+    );
+  }
 
   List<Widget> paths() => [
     heading(pack.title),
