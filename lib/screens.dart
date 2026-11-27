@@ -145,30 +145,47 @@ class _StudyHomeState extends State<StudyHome> {
     await tts.stop();
   }
 
-  Future<void> speak(String text) async {
+  Future<void> speak(String text, {String? lang}) async {
     if (speaking) return stopSpeech();
     final active = ++speechRequest;
-    final language = locale == 'tl' ? 'fil-PH' : 'en-US';
+    final requestedLanguage = lang ?? locale;
+    final language = switch (requestedLanguage) {
+      'en' => 'en-US',
+      'tl' => 'fil-PH',
+      _ => requestedLanguage,
+    };
+    final code = language.toLowerCase().split('-').first;
+    final isFilipino = code == 'fil' || code == 'tl';
+    Object? voices;
     try {
-      final voices = await tts.getVoices;
-      final code = language.toLowerCase().split('-').first;
-      final available = voices is List
-          ? voices.whereType<Map>().where((voice) {
-              final networkRequired = voice['network_required'].toString();
-              if (networkRequired == '1' || networkRequired == 'true') {
-                return false;
-              }
-              final name = voice['locale'].toString().toLowerCase();
-              return name.startsWith(code) ||
-                  (locale == 'tl' && name.startsWith('tl'));
-            }).firstOrNull
-          : null;
-      if (available == null) throw StateError('Voice unavailable');
+      voices = await tts.getVoices;
+    } catch (_) {
+      // Some platforms support language selection without voice enumeration.
+    }
+    if (!mounted || active != speechRequest) return;
+    final available = voices is List
+        ? voices.whereType<Map>().where((voice) {
+            final networkRequired = voice['network_required']
+                .toString()
+                .toLowerCase();
+            if (networkRequired == '1' || networkRequired == 'true') {
+              return false;
+            }
+            final name = voice['locale'].toString().toLowerCase();
+            return name.startsWith(code) ||
+                (isFilipino && name.startsWith('tl'));
+          }).firstOrNull
+        : null;
+    try {
       if (!mounted || active != speechRequest) return;
-      await tts.setVoice({
-        'name': available['name'].toString(),
-        'locale': available['locale'].toString(),
-      });
+      if (available == null) {
+        await tts.setLanguage(language);
+      } else {
+        await tts.setVoice({
+          'name': available['name'].toString(),
+          'locale': available['locale'].toString(),
+        });
+      }
       if (!mounted || !inSession || active != speechRequest) return;
       setState(() => speaking = true);
       await tts.speak(text);
@@ -177,8 +194,8 @@ class _StudyHomeState extends State<StudyHome> {
         setState(() => speaking = false);
         message(
           tr(
-            'Install a voice for this language in your phone settings.',
-            'Mag-install ng boses para sa wikang ito sa settings ng phone.',
+            'Could not read aloud. Check your text-to-speech settings.',
+            'Hindi mabasa nang malakas. Suriin ang settings ng text-to-speech.',
           ),
         );
       }
@@ -204,6 +221,10 @@ class _StudyHomeState extends State<StudyHome> {
   }, top: true);
 
   void start(int mode) => update(() => run = StudyRun(pack, mode), top: true);
+
+  void startCards() => update(() {
+    run = StudyRun(pack, 0)..stage = 'cards';
+  }, top: true);
 
   void nextQuestion() {
     final current = run;
@@ -503,6 +524,32 @@ class _StudyHomeState extends State<StudyHome> {
     child: button(label, tap),
   );
 
+  Widget languageSelector() => Semantics(
+    label: tr('Study language', 'Wika ng pag-aaral'),
+    child: SegmentedButton<String>(
+      showSelectedIcon: false,
+      style: SegmentedButton.styleFrom(
+        padding: const EdgeInsets.symmetric(horizontal: 10),
+        minimumSize: const Size(0, 42),
+        side: BorderSide.none,
+        backgroundColor: stroke,
+        selectedBackgroundColor: Colors.white,
+        selectedForegroundColor: green,
+        foregroundColor: muted,
+        textStyle: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
+      ),
+      segments: const [
+        ButtonSegment(value: 'en', label: Text('English')),
+        ButtonSegment(value: 'tl', label: Text('Tagalog')),
+      ],
+      selected: {locale},
+      onSelectionChanged: (choice) {
+        unawaited(stopSpeech());
+        update(() => locale = choice.single);
+      },
+    ),
+  );
+
   Widget navigation() {
     final labels = [
       tr('Lessons', 'Aralin'),
@@ -555,31 +602,7 @@ class _StudyHomeState extends State<StudyHome> {
       crossAxisAlignment: WrapCrossAlignment.center,
       spacing: 12,
       runSpacing: 8,
-      children: [
-        logo(),
-        SegmentedButton<String>(
-          showSelectedIcon: false,
-          style: SegmentedButton.styleFrom(
-            padding: const EdgeInsets.symmetric(horizontal: 10),
-            minimumSize: const Size(0, 42),
-            side: BorderSide.none,
-            backgroundColor: stroke,
-            selectedBackgroundColor: Colors.white,
-            selectedForegroundColor: green,
-            foregroundColor: muted,
-            textStyle: const TextStyle(
-              fontSize: 14,
-              fontWeight: FontWeight.bold,
-            ),
-          ),
-          segments: const [
-            ButtonSegment(value: 'en', label: Text('English')),
-            ButtonSegment(value: 'tl', label: Text('Tagalog')),
-          ],
-          selected: {locale},
-          onSelectionChanged: (choice) => update(() => locale = choice.single),
-        ),
-      ],
+      children: [logo(), languageSelector()],
     ),
     const SizedBox(height: 22),
     heading(tr('Add a lesson', 'Magdagdag ng aralin')),
@@ -722,7 +745,7 @@ class _StudyHomeState extends State<StudyHome> {
     const SizedBox(height: 16),
     modeCard(
       0,
-      'CATCH-UP',
+      tr('CATCH-UP', 'PAGHABOL'),
       tr('Start from the basics', 'Magsimula sa mga batayan'),
       tr(
         'Simple language, one idea at a time. Good if the lesson is new to you.',
@@ -732,11 +755,51 @@ class _StudyHomeState extends State<StudyHome> {
     const SizedBox(height: 16),
     modeCard(
       1,
-      'PRACTICE',
+      tr('PRACTICE', 'PAGSASANAY'),
       tr('Test what you know', 'Subukan ang iyong nalalaman'),
       tr(
         "Closer to the exam level. Good if you've already read the lesson.",
         'Mas malapit sa antas ng pagsusulit. Para sa nabasa mo nang aralin.',
+      ),
+    ),
+    const SizedBox(height: 16),
+    Semantics(
+      button: true,
+      child: InkWell(
+        onTap: startCards,
+        borderRadius: BorderRadius.circular(16),
+        child: panel(
+          Row(
+            children: [
+              const CircleAvatar(
+                backgroundColor: mint,
+                foregroundColor: green,
+                child: Icon(Icons.style_outlined),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    heading(
+                      tr('Review flashcards', 'Repasuhin ang mga flashcard'),
+                      size: 19,
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      tr(
+                        'Practice vocabulary in either direction.',
+                        'Magpraktis ng talasalitaan sa alinmang direksyon.',
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const Icon(Icons.chevron_right, color: green),
+            ],
+          ),
+          border: stroke,
+        ),
       ),
     ),
   ];
@@ -832,12 +895,14 @@ class _StudyHomeState extends State<StudyHome> {
             'ⓘ  ${tr('AI-made, check with your teacher', 'Gawa ng AI, ipasuri sa iyong guro')}',
             style: const TextStyle(color: muted),
           ),
+          const SizedBox(height: 8),
+          Align(alignment: Alignment.centerRight, child: languageSelector()),
         ],
       ),
     );
   }
 
-  Widget readAloud(String text) => Align(
+  Widget readAloud(String text, {String? lang}) => Align(
     alignment: Alignment.centerLeft,
     child: OutlinedButton.icon(
       style: OutlinedButton.styleFrom(
@@ -848,7 +913,7 @@ class _StudyHomeState extends State<StudyHome> {
         minimumSize: Size(stage == 'summary' ? double.infinity : 0, 46),
         alignment: Alignment.centerLeft,
       ),
-      onPressed: () => speak(text),
+      onPressed: () => speak(text, lang: lang),
       icon: Icon(speaking ? Icons.stop : Icons.volume_up_outlined, size: 18),
       label: Text(
         speaking
@@ -865,7 +930,7 @@ class _StudyHomeState extends State<StudyHome> {
       Align(
         alignment: Alignment.centerLeft,
         child: badge(
-          '${tr('Level', 'Antas')} ${index + 1} · ${index == 0 ? 'Catch-up' : 'Practice'}',
+          '${tr('Level', 'Antas')} ${index + 1} · ${index == 0 ? tr('Catch-up', 'Paghabol') : tr('Practice', 'Pagsasanay')}',
         ),
       ),
       const SizedBox(height: 12),
@@ -953,12 +1018,21 @@ class _StudyHomeState extends State<StudyHome> {
     final question = current.question;
     final answered = current.selected != null;
     final hint = answered && !current.settled;
+    final feedback = hint
+        ? question.hints[current.wrong - 1]
+        : question.explanation;
+    final spokenOptions = question.options
+        .asMap()
+        .entries
+        .map(
+          (entry) =>
+              '${String.fromCharCode(65 + entry.key)}. ${copy(entry.value)}',
+        )
+        .join('. ');
     return [
       heading(copy(question.prompt), size: 22),
       const SizedBox(height: 8),
-      readAloud(
-        [copy(question.prompt), ...question.options.map(copy)].join('. '),
-      ),
+      readAloud('${copy(question.prompt)} $spokenOptions'),
       const SizedBox(height: 12),
       ...List.generate(question.options.length, (index) {
         final marked = current.selected == index;
@@ -1033,14 +1107,8 @@ class _StudyHomeState extends State<StudyHome> {
                   size: 18,
                 ),
                 const SizedBox(height: 6),
-                Text(
-                  copy(
-                    hint
-                        ? question.hints[current.wrong - 1]
-                        : question.explanation,
-                  ),
-                  style: const TextStyle(fontSize: 16),
-                ),
+                Text(copy(feedback), style: const TextStyle(fontSize: 16)),
+                readAloud(copy(feedback)),
                 sourceButton(question.source, label: true),
               ],
             ),
@@ -1053,11 +1121,30 @@ class _StudyHomeState extends State<StudyHome> {
   List<Widget> flashcards() {
     final current = run!;
     final card = pack.cards[current.queue.first];
+    final showingTagalog = current.showingTagalog;
+    final language = showingTagalog ? 'tl' : 'en';
+    final term = showingTagalog ? card.tl : card.en;
+    final definition = localized(card.definition, language);
     return [
-      const SizedBox(height: 24),
+      const SizedBox(height: 8),
+      heading(tr('Study direction', 'Direksyon ng pag-aaral'), size: 16),
+      const SizedBox(height: 8),
+      SegmentedButton<bool>(
+        showSelectedIcon: false,
+        segments: const [
+          ButtonSegment(value: false, label: Text('EN → TL')),
+          ButtonSegment(value: true, label: Text('TL → EN')),
+        ],
+        selected: {current.reverseCards},
+        onSelectionChanged: (choice) {
+          unawaited(stopSpeech());
+          update(() => current.setCardDirection(choice.single));
+        },
+      ),
+      const SizedBox(height: 16),
       Semantics(
         button: true,
-        label: current.flipped
+        label: showingTagalog
             ? tr(
                 'Showing Filipino side. Tap to flip.',
                 'Nasa panig na Filipino. I-tap para baliktarin.',
@@ -1067,7 +1154,10 @@ class _StudyHomeState extends State<StudyHome> {
                 'Nasa panig na English. I-tap para baliktarin.',
               ),
         child: InkWell(
-          onTap: () => update(current.flip),
+          onTap: () {
+            unawaited(stopSpeech());
+            update(current.flip);
+          },
           borderRadius: BorderRadius.circular(16),
           child: panel(
             SizedBox(
@@ -1076,13 +1166,15 @@ class _StudyHomeState extends State<StudyHome> {
                 padding: const EdgeInsets.symmetric(vertical: 54),
                 child: Column(
                   children: [
-                    badge(current.flipped ? 'FILIPINO' : 'ENGLISH'),
+                    badge(
+                      showingTagalog ? 'FILIPINO' : tr('ENGLISH', 'INGLES'),
+                    ),
                     const SizedBox(height: 12),
-                    heading(current.flipped ? card.tl : card.en, size: 30),
+                    heading(term, size: 30),
                     const SizedBox(height: 10),
                     Text(
                       current.flipped
-                          ? copy(card.definition)
+                          ? definition
                           : tr('Tap to flip', 'I-tap para baliktarin'),
                       textAlign: TextAlign.center,
                       style: const TextStyle(fontSize: 16),
@@ -1096,6 +1188,8 @@ class _StudyHomeState extends State<StudyHome> {
           ),
         ),
       ),
+      const SizedBox(height: 12),
+      readAloud(current.flipped ? '$term. $definition' : term, lang: language),
     ];
   }
 
@@ -1106,18 +1200,17 @@ class _StudyHomeState extends State<StudyHome> {
         Row(
           children: [
             Expanded(
-              child: button(
-                tr('Show again', 'Ipakita ulit'),
-                () => update(() => run!.rate(false)),
-                outline: true,
-              ),
+              child: button(tr('Show again', 'Ipakita ulit'), () {
+                unawaited(stopSpeech());
+                update(() => run!.rate(false));
+              }, outline: true),
             ),
             const SizedBox(width: 10),
             Expanded(
-              child: button(
-                tr('Got it', 'Nakuha ko'),
-                () => update(() => run!.rate(true)),
-              ),
+              child: button(tr('Got it', 'Nakuha ko'), () {
+                unawaited(stopSpeech());
+                update(() => run!.rate(true));
+              }),
             ),
           ],
         ),
@@ -1169,13 +1262,7 @@ class _StudyHomeState extends State<StudyHome> {
         }, top: true),
       ),
       const SizedBox(height: 10),
-      button(
-        tr('Flashcards', 'Mga flashcard'),
-        () => update(() {
-          run = StudyRun(pack, 0)..stage = 'cards';
-        }, top: true),
-        outline: true,
-      ),
+      button(tr('Flashcards', 'Mga flashcard'), startCards, outline: true),
     ];
   }
 
