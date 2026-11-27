@@ -139,6 +139,7 @@ class StudyRun {
             'selected': null,
             'queue': List<int>.generate(pack.cards.length, (index) => index),
             'flipped': false,
+            'cardDirection': 'en-tl',
           };
 
   final StudyPack pack;
@@ -153,6 +154,8 @@ class StudyRun {
   int get wrong => data['wrong'] as int;
   int? get selected => data['selected'] as int?;
   bool get flipped => data['flipped'] as bool;
+  bool get reverseCards => data['cardDirection'] == 'tl-en';
+  bool get showingTagalog => flipped != reverseCards;
   Question get question => pack.questions[used.last];
   bool get correct => selected == question.key;
   bool get settled => selected != null && (correct || wrong > 2);
@@ -201,6 +204,11 @@ class StudyRun {
 
   void retry() => data['selected'] = null;
   void flip() => data['flipped'] = !flipped;
+  void setCardDirection(bool reverse) {
+    data['cardDirection'] = reverse ? 'tl-en' : 'en-tl';
+    data['flipped'] = false;
+  }
+
   void rate(bool gotIt) {
     final card = queue.removeAt(0);
     if (!gotIt) queue.add(card);
